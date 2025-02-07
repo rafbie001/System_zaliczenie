@@ -1,10 +1,24 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from .routes import router
 from .database import connect_to_mongo, close_mongo_connection
 import logging
 from fastapi.responses import JSONResponse
+from flask import Flask
+from utils.push_notifications import push_notifications_bp
+from routes.dispatches import dispatches_bp
 
+app = Flask(__name__)
+
+# Rejestracja blueprintów
+app.register_blueprint(push_notifications_bp)
+app.register_blueprint(dispatches_bp)
 
 # Konfiguracja logowania
 logging.basicConfig(

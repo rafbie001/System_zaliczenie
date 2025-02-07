@@ -8,10 +8,31 @@ from typing import List
 from datetime import datetime
 import firebase_admin
 from firebase_admin import messaging
+from flask import Blueprint, request, jsonify
+from ..utils.push_notifications import (send_expo_push_notification, registered_tokens)
+
 
 
 router = APIRouter(tags=["dispatches"])
 
+dispatches_bp = Blueprint('dispatches', __name__)
+
+@dispatches_bp.route('/api/dispatches', methods=['POST'])
+def create_dispatch():
+    new_dispatch_data = request.get_json()
+    new_dispatch = {
+        "id": 123,  # Możesz zamienić na ID z bazy
+        "data": new_dispatch_data
+    }
+
+    # Wysłanie powiadomień push do wszystkich zarejestrowanych tokenów
+    title = "Nowe zgłoszenie!"
+    body = "Pojawiło się nowe zgłoszenie przypisane do Twojego zespołu."
+
+    for token in registered_tokens:
+        send_expo_push_notification(token, title, body, data={"dispatchId": str(new_dispatch["id"])})
+
+    return jsonify({"message": "Zgłoszenie utworzone", "dispatch": new_dispatch}), 201
 
 @router.delete("/dispatches/{dispatch_id}")
 async def delete_dispatch(

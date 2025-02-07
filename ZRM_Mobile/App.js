@@ -1,24 +1,28 @@
-// App.js
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Alert, Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+import axios from 'axios';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { View, Text, Button, Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
-import { registerForPushNotificationsAsync } from './src/notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Importuj swoje ekrany – utworzymy je za chwilę
+// Import ekranów
 import ReportsList from './src/screens/ReportsList';
 import ReportDetails from './src/screens/ReportDetails';
 
 const Stack = createStackNavigator();
+
+// Ustawienia powiadomień Expo
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
-    shouldPlaySound: false,
+    shouldPlaySound: true,
     shouldSetBadge: false,
   }),
 });
 
+// Funkcja rejestracji tokena push
 async function registerForPushNotificationsAsync() {
   let token;
   if (Constants.isDevice) {
@@ -29,14 +33,15 @@ async function registerForPushNotificationsAsync() {
       finalStatus = status;
     }
     if (finalStatus !== 'granted') {
-      Alert.alert('Błąd', 'Nie udało się uzyskać uprawnień do powiadomień!');
+      Alert.alert('Błąd', 'Nie uzyskano pozwolenia na powiadomienia!');
       return;
     }
+
     token = (await Notifications.getExpoPushTokenAsync()).data;
     console.log('Expo Push Token:', token);
 
-    // Wyślij token do backendu – wywołaj endpoint rejestracji tokena
     try {
+      await AsyncStorage.setItem('expoPushToken', token);
       await axios.post('http://10.0.2.2:5000/api/push-token', { expoPushToken: token });
       console.log('Token wysłany do backendu');
     } catch (error) {
@@ -47,57 +52,44 @@ async function registerForPushNotificationsAsync() {
   }
 
   if (Platform.OS === 'android') {
-    Notifications.setNotificationChannelAsync('default', {
+    await Notifications.setNotificationChannelAsync('default', {
       name: 'default',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#FF231F7C',
     });
   }
+
   return token;
 }
 
 export default function App() {
   const [expoPushToken, setExpoPushToken] = useState('');
+  const [notification, setNotification] = useState(false);
+  const notificationListener = useRef();
+  const responseListener = useRef();
 
   useEffect(() => {
     registerForPushNotificationsAsync().then(token => setExpoPushToken(token));
 
-    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
-      console.log('Odebrano powiadomienie:', notification);
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+      setNotification(notification);
+      console.log('Powiadomienie odebrane:', notification);
     });
 
-    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('Reakcja na powiadomienie:', response);
-    });
-
-    return () => {
-      Notifications.removeNotificationSubscription(notificationListener);
-      Notifications.removeNotificationSubscription(responseListener);
-    };
-  }, []);
-
-
-export default function App() {
-  const [expoPushToken, setExpoPushToken] = useState('');
-
-  useEffect(() => {
-    // Rejestracja powiadomień push
-    registerForPushNotificationsAsync().then(token => setExpoPushToken(token));
-
-    // Listener na odebrane powiadomienia
-    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
-      console.log('Odebrano powiadomienie:', notification);
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('Użytkownik kliknął powiadomienie:', response);
     });
 
     return () => {
-      Notifications.removeNotificationSubscription(notificationListener);
+      Notifications.removeNotificationSubscription(notificationListener.current);
+      Notifications.removeNotificationSubscription(responseListener.current);
     };
   }, []);
 
   return (
     <NavigationContainer>
-      <Stack.Navigator>
+      <Stack.Navigator initialRouteName="ReportsList">
         <Stack.Screen name="ReportsList" component={ReportsList} options={{ title: 'Lista Zgłoszeń' }} />
         <Stack.Screen name="ReportDetails" component={ReportDetails} options={{ title: 'Szczegóły zgłoszenia' }} />
       </Stack.Navigator>
